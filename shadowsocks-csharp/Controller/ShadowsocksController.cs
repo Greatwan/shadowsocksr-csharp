@@ -192,6 +192,9 @@ namespace Shadowsocks.Controller
         {
             List<Server> missingServers = MergeConfiguration(_config, config.configs);
             _config.CopyFrom(config);
+
+            Console.WriteLine("SaveServersConfig " + _config.userInfos.Count);
+
             foreach (Server s in missingServers)
             {
                 s.GetConnections().CloseAll();
@@ -208,6 +211,7 @@ namespace Shadowsocks.Controller
 
         public bool AddServerBySSURL(string ssURL, string force_group = null, bool toLast = false)
         {
+            Console.WriteLine("AddServerBySSURL!");
             if (ssURL.StartsWith("ss://", StringComparison.OrdinalIgnoreCase) || ssURL.StartsWith("ssr://", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -237,6 +241,54 @@ namespace Shadowsocks.Controller
             {
                 return false;
             }
+        }
+
+        public void addUserInfo(UserInfo userInfo)
+        {
+            if (isUserInfoExist(userInfo))
+            {
+                editUserInfo(userInfo);
+            }
+            else
+            {
+                Console.WriteLine("addUserInfo " + _config.userInfos.Count);
+                _config.userInfos.Add(userInfo);
+                Console.WriteLine("addUserInfo "+_config.userInfos.Count);
+                SaveConfig(_config);
+                Console.WriteLine("addUserInfo "+_config.userInfos.Count);
+            }
+        }
+
+        public void editUserInfo(UserInfo userInfo)
+        {
+            for (int i = 0; i < _config.userInfos.Count; i++)
+            {
+                if (_config.userInfos[i].email == userInfo.email)
+                {
+                    _config.userInfos[i] = userInfo;
+                    Console.WriteLine("editUserInfo");
+                    SaveConfig(_config);
+                }
+            }
+        }
+
+        public bool isUserInfoExist(UserInfo userInfo)
+        {
+            if (_config.userInfos.Count==0)
+            {
+                return false;
+            } else
+            {
+                for (int i=0;i< _config.userInfos.Count;i++)
+                {
+                    if (_config.userInfos[i].email==userInfo.email)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
         }
 
         public void ToggleMode(ProxyMode mode)
@@ -409,6 +461,7 @@ namespace Shadowsocks.Controller
                 {
                     if (_listener != null && !_listener.isConfigChange(_config))
                     {
+                        Console.WriteLine("Reload->_listener != null && !_listener.isConfigChange(_config)");
                         Local local = new Local(_config, _transfer, _rangeSet);
                         _listener.GetServices()[0] = local;
 #if !_CONSOLE
@@ -423,15 +476,22 @@ namespace Shadowsocks.Controller
                     }
                     else
                     {
+                        Console.WriteLine("Reload->!!! _listener != null && !_listener.isConfigChange(_config)");
                         if (_listener != null)
                         {
                             _listener.Stop();
+                            Console.WriteLine("Reload->_listener.Stop();");
                             _listener = null;
+                        }else
+                        {
+                            Console.WriteLine("Reload->_listener is null");
                         }
 
 #if !_CONSOLE
                         polipoRunner.Stop();
+                        Console.WriteLine("Reload->polipoRunner.Stop();");
                         polipoRunner.Start(_config);
+                        Console.WriteLine("Reload->polipoRunner.Start(_config);");
 #endif
 
                         Local local = new Local(_config, _transfer, _rangeSet);
@@ -443,7 +503,16 @@ namespace Shadowsocks.Controller
                         services.Add(new HttpPortForwarder(polipoRunner.RunningPort, _config));
 #endif
                         _listener = new Listener(services);
-                        _listener.Start(_config, 0);
+                        Console.WriteLine("Reload->_listener = new Listener(services);");
+                        try
+                        {
+                            _listener.Start(_config, 0);
+                        } catch (Exception e)
+                        {
+                            Console.WriteLine(e.ToString());
+                        }
+                        
+                        Console.WriteLine("Reload->_listener.Start(_config, 0);");
                     }
                     break;
                 }
@@ -456,7 +525,7 @@ namespace Shadowsocks.Controller
                         SocketException se = (SocketException)e;
                         if (se.SocketErrorCode == SocketError.AccessDenied)
                         {
-                            e = new Exception(I18N.GetString("Port already in use") + string.Format(" {0}", _config.localPort), e);
+                            e = new Exception(I18N.GetString("Reload->Port already in use") + string.Format(" {0}", _config.localPort), e);
                         }
                     }
                     Logging.LogUsefulException(e);
@@ -498,7 +567,7 @@ namespace Shadowsocks.Controller
                         SocketException se = (SocketException)e;
                         if (se.SocketErrorCode == SocketError.AccessDenied)
                         {
-                            e = new Exception(I18N.GetString("Port already in use") + string.Format(" {0}", pair.Key), e);
+                            e = new Exception(I18N.GetString("Reload->Port already in use") + string.Format(" {0}", pair.Key), e);
                         }
                     }
                     Logging.LogUsefulException(e);
@@ -515,8 +584,18 @@ namespace Shadowsocks.Controller
 
         protected void SaveConfig(Configuration newConfig)
         {
+            //Console.WriteLine("SaveConfig userinfo->count"+newConfig.userInfos.Count+" server->count"+newConfig.configs.Count);
             Configuration.Save(newConfig);
-            Reload();
+            //Console.WriteLine("SaveConfig userinfo->count" + newConfig.userInfos.Count + " server->count" + newConfig.configs.Count);
+            try
+            {
+                //为什么reload
+                Reload();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("SaveConfig(Configuration newConfig)->Reload()->" + e);
+            }
         }
 
 

@@ -17,6 +17,10 @@ namespace Shadowsocks.Obfs
             {
                 _registeredObfs.Add(method, typeof(Plain));
             }
+            foreach (string method in AuthSimple.SupportedObfs())
+            {
+                _registeredObfs.Add(method, typeof(AuthSimple));
+            }
             foreach (string method in HttpSimpleObfs.SupportedObfs())
             {
                 _registeredObfs.Add(method, typeof(HttpSimpleObfs));

@@ -826,12 +826,42 @@ namespace Shadowsocks.Controller
                 //        buffer[0] = 2;
                 //    }
                 //}
-                byte[] bytesToEncrypt = _protocol.ClientPreEncrypt(buffer, size, out outlength);
+                byte[] bytesToEncrypt;
+                try
+                {
+                    bytesToEncrypt = _protocol.ClientPreEncrypt(buffer, size, out outlength);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    return 0;
+                }
+
                 if (bytesToEncrypt == null)
                     return 0;
+                //try
+                //{
+                //    Console.WriteLine(size);
+                //    //Console.WriteLine(BitConverter.ToString(buffer));
+                //    Console.WriteLine("Origin "+Util.Utils.byteToString_python_type(buffer, size));
+                //    Console.WriteLine("PreEncrypt " + Util.Utils.byteToString_python_type(bytesToEncrypt, outlength));
+                //}
+                //catch (Exception e)
+                //{
+                //    Console.WriteLine(e);
+                //}
                 Util.Utils.SetArrayMinSize(ref SendEncryptBuffer, outlength + 32);
                 _encryptor.Encrypt(bytesToEncrypt, outlength, SendEncryptBuffer, out bytesToSend);
                 obfsBuffer = _obfs.ClientEncode(SendEncryptBuffer, bytesToSend, out obfsSendSize);
+                //try
+                //{
+                //    //Console.WriteLine(BitConverter.ToString(buffer));
+                //    Console.WriteLine("Obfs " + Util.Utils.byteToString_python_type(obfsBuffer, obfsSendSize));
+                //}
+                //catch (Exception e)
+                //{
+                //    Console.WriteLine(e);
+                //}
             }
             return SendAll(obfsBuffer, obfsSendSize, 0);
         }
@@ -958,7 +988,9 @@ namespace Shadowsocks.Controller
                     byte[] decryptBuffer = new byte[65536];
                     _encryptor.ResetDecrypt();
                     _encryptor.Decrypt(st.buffer, bytesRead, decryptBuffer, out bytesToSend);
+                    //Console.WriteLine("Decrypted " + Util.Utils.byteToString_python_type(decryptBuffer, bytesToSend));
                     obfsBuffer = _protocol.ClientUdpPostDecrypt(decryptBuffer, bytesToSend, out bytesToSend);
+                    //Console.WriteLine("PostDecrypted " + Util.Utils.byteToString_python_type(decryptBuffer, bytesToSend));
                     decryptBuffer = ParseUDPHeader(obfsBuffer, ref bytesToSend);
                     AddRemoteUDPRecvBufferHeader(decryptBuffer, remoteSendBuffer, ref bytesToSend);
                 }

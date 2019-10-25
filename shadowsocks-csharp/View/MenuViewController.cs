@@ -1,6 +1,7 @@
 ﻿using Shadowsocks.Controller;
 using Shadowsocks.Model;
 using Shadowsocks.Properties;
+using Shadowsocks.Util;
 using System;
 using System.IO;
 using System.Collections.Generic;
@@ -15,6 +16,12 @@ using ZXing.Common;
 using ZXing.QrCode;
 using System.Threading;
 using System.Text.RegularExpressions;
+
+// For Api and json parse
+using System.Net;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
 
 namespace Shadowsocks.View
 {
@@ -31,6 +38,17 @@ namespace Shadowsocks.View
 
         private NotifyIcon _notifyIcon;
         private ContextMenu contextMenu1;
+
+        private MenuItem updateApiNodeItem;
+        private MenuItem editApiInfoItem;
+        private MenuItem accountItem;
+        private MenuItem apiItem;
+        private MenuItem testItem;
+        private MenuItem test1Item;
+        private MenuItem test2Item;
+        private MenuItem test3Item;
+        private MenuItem test4Item;
+        private MenuItem newMainFormItem;
 
         private MenuItem noModifyItem;
         private MenuItem enableItem;
@@ -54,9 +72,13 @@ namespace Shadowsocks.View
         private ServerLogForm serverLogForm;
         private PortSettingsForm portMapForm;
         private SubscribeForm subScribeForm;
+        private ApiForm apiForm;
+        private NewMainForm newMainForm;
+        private AccountForm accountForm;
         private LogForm logForm;
         private string _urlToOpen;
         private System.Timers.Timer timerDelayCheckUpdate;
+        
 
         public MenuViewController(ShadowsocksController controller)
         {
@@ -82,24 +104,62 @@ namespace Shadowsocks.View
             //_notifyIcon.MouseDoubleClick += notifyIcon1_DoubleClick;
 
             updateChecker = new UpdateChecker();
-            updateChecker.NewVersionFound += updateChecker_NewVersionFound;
+            if (ConnectTest.hasInternetAccess())
+            {
+                //Thread t1 = new Thread(() =>
+                //{
+                //    updateChecker.NewVersionFound += updateChecker_NewVersionFound;
+                //});
+                //t1.Start();
+            }
+
+            //updateChecker.NewVersionFound += updateChecker_NewVersionFound;
 
             updateFreeNodeChecker = new UpdateFreeNode();
             updateFreeNodeChecker.NewFreeNodeFound += updateFreeNodeChecker_NewFreeNodeFound;
+            //MessageBox.Show(updateFreeNodeChecker.NewFreeNodeFound);
+            
 
             updateSubscribeManager = new UpdateSubscribeManager();
 
             LoadCurrentConfiguration();
 
             Configuration cfg = controller.GetCurrentConfiguration();
-            if (cfg.isDefaultConfig() || cfg.nodeFeedAutoUpdate)
+            if (ConnectTest.hasInternetAccess())
             {
-                updateSubscribeManager.CreateTask(controller.GetCurrentConfiguration(), updateFreeNodeChecker, -1, !cfg.isDefaultConfig());
+                Thread t2 = new Thread(() => {
+                    //更新订阅链接
+                    if (cfg.isDefaultConfig() || cfg.nodeFeedAutoUpdate)
+                    {
+                        updateSubscribeManager.CreateTask(controller.GetCurrentConfiguration(), updateFreeNodeChecker, -1, !cfg.isDefaultConfig());
+                    }
+
+                });
+                t2.Start();
             }
 
-            timerDelayCheckUpdate = new System.Timers.Timer(1000.0 * 10);
-            timerDelayCheckUpdate.Elapsed += timer_Elapsed;
-            timerDelayCheckUpdate.Start();
+
+
+            // 如果是初始空白配置，则载入api界面
+            if (cfg.isDefaultConfig())
+            {
+                //editApiInfoItem.PerformClick();
+                editApiInfoItem_Click(this, new EventArgs());
+            }
+            else
+            {
+                // 如果设置了【自动更新】，则从api自动更新
+                if (cfg.ApiAutoUpdate && ConnectTest.hasInternetAccess())
+                {
+                    //updateApiNodeItem.PerformClick();
+                    updateApiNodeItem_Click(this, new EventArgs());
+                }
+            }
+
+
+            //timerDelayCheckUpdate = new System.Timers.Timer(1000.0 * 10);
+            //timerDelayCheckUpdate.Elapsed += timer_Elapsed;
+            //timerDelayCheckUpdate.Start();
         }
 
         private void timer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
@@ -213,6 +273,13 @@ namespace Shadowsocks.View
         private void LoadMenu()
         {
             this.contextMenu1 = new ContextMenu(new MenuItem[] {
+                newMainFormItem = CreateMenuItem("Show main panel", new EventHandler(this.newMainFormItem_Click)),
+                updateApiNodeItem = CreateMenuItem("Update node", new EventHandler(this.updateApiNodeItem_Click)),
+                apiItem = CreateMenuGroup("Login", new MenuItem[] {
+                    editApiInfoItem = CreateMenuItem("Edit login information", new EventHandler(this.editApiInfoItem_Click)),
+                    accountItem = CreateMenuItem("Account info", new EventHandler(this.accountItem_Click))
+                }),
+                new MenuItem("-"),
                 modeItem = CreateMenuGroup("Mode", new MenuItem[] {
                     enableItem = CreateMenuItem("Disable system proxy", new EventHandler(this.EnableItem_Click)),
                     PACModeItem = CreateMenuItem("PAC", new EventHandler(this.PACModeItem_Click)),
@@ -337,6 +404,7 @@ namespace Shadowsocks.View
             if (!String.IsNullOrEmpty(updateFreeNodeChecker.FreeNodeResult))
             {
                 List<string> urls = new List<string>();
+                //MessageBox.Show(updateFreeNodeChecker.FreeNodeResult);
                 updateFreeNodeChecker.FreeNodeResult = updateFreeNodeChecker.FreeNodeResult.TrimEnd('\r', '\n', ' ');
                 Configuration config = controller.GetCurrentConfiguration();
                 Server selected_server = null;
@@ -353,7 +421,7 @@ namespace Shadowsocks.View
                     updateFreeNodeChecker.FreeNodeResult = "";
                 }
                 int max_node_num = 0;
-
+                //MessageBox.Show(updateFreeNodeChecker.FreeNodeResult);
                 Match match_maxnum = Regex.Match(updateFreeNodeChecker.FreeNodeResult, "^MAX=([0-9]+)");
                 if (match_maxnum.Success)
                 {
@@ -366,7 +434,7 @@ namespace Shadowsocks.View
 
                     }
                 }
-                URL_Split(updateFreeNodeChecker.FreeNodeResult, ref urls);
+                Utils.URL_Split(updateFreeNodeChecker.FreeNodeResult, ref urls);
                 for (int i = urls.Count - 1; i >= 0; --i)
                 {
                     if (!urls[i].StartsWith("ssr"))
@@ -549,6 +617,218 @@ namespace Shadowsocks.View
             }
         }
 
+        void updateFreeNodeChecker_NewFreeNodeFound_Api(string result)
+        {
+            int count = 0;
+            //string result = result;
+            //updateFreeNodeChecker.FreeNodeResult = result;
+            //MessageBox.Show(result);
+            if ( !String.IsNullOrEmpty(result) )
+            {
+                List<string> urls = new List<string>();
+                int max_node_num = 0;
+                Configuration config = controller.GetCurrentConfiguration();
+                Server selected_server = null;
+                if (config.index >= 0 && config.index < config.configs.Count)
+                {
+                    selected_server = config.configs[config.index];
+                }
+
+                Utils.URL_Split(result, ref urls);
+                for (int i = urls.Count - 1; i >= 0; --i)
+                {
+                    if (!urls[i].StartsWith("ssr"))
+                        urls.RemoveAt(i);
+                }
+                if (urls.Count > 0)
+                {
+                    bool keep_selected_server = false; // set 'false' if import all nodes
+                    if (max_node_num <= 0 || max_node_num >= urls.Count)
+                    {
+                        urls.Reverse();
+                    }
+                    else
+                    {
+                        Random r = new Random();
+                        Util.Utils.Shuffle(urls, r);
+                        urls.RemoveRange(max_node_num, urls.Count - max_node_num);
+                        if (!config.isDefaultConfig())
+                            keep_selected_server = true;
+                    }
+                    string lastGroup = null;
+                    string curGroup = null;
+                    foreach (string url in urls)
+                    {
+                        try // try get group name
+                        {
+                            Server server = new Server(url, null);
+                            if (!String.IsNullOrEmpty(server.group))
+                            {
+                                curGroup = server.group;
+                                break;
+                            }
+                        }
+                        catch
+                        { }
+                    }
+                    //MessageBox.Show(curGroup + "||1");
+                    string subscribeURL = updateSubscribeManager.URL;
+                    //MessageBox.Show(subscribeURL + "||2");
+                    if (String.IsNullOrEmpty(curGroup))
+                    {
+                        curGroup = subscribeURL;
+                    }
+
+                    //MessageBox.Show(curGroup + "||3");
+                    for (int i = 0; i < config.serverSubscribes.Count; ++i)
+                    {
+                        if (subscribeURL == config.serverSubscribes[i].URL)
+                        {
+                            lastGroup = config.serverSubscribes[i].Group;
+                            //MessageBox.Show(lastGroup);
+                            config.serverSubscribes[i].Group = curGroup;
+                            break;
+                        }
+                    }
+                    if (lastGroup == null)
+                    {
+                        lastGroup = curGroup;
+                    }
+
+                    if (keep_selected_server && selected_server.group == curGroup)
+                    {
+                        bool match = false;
+                        for (int i = 0; i < urls.Count; ++i)
+                        {
+                            try
+                            {
+                                Server server = new Server(urls[i], null);
+                                if (selected_server.isMatchServer(server))
+                                {
+                                    match = true;
+                                    break;
+                                }
+                            }
+                            catch
+                            { }
+                        }
+                        if (!match)
+                        {
+                            urls.RemoveAt(0);
+                            urls.Add(selected_server.GetSSRLinkForServer());
+                        }
+                    }
+
+                    // import all, find difference
+                    {
+                        Dictionary<string, Server> old_servers = new Dictionary<string, Server>();
+                        if (!String.IsNullOrEmpty(lastGroup))
+                        {
+                            for (int i = config.configs.Count - 1; i >= 0; --i)
+                            {
+                                if (lastGroup == config.configs[i].group)
+                                {
+                                    old_servers[config.configs[i].id] = config.configs[i];
+                                }
+                            }
+                        }
+                        foreach (string url in urls)
+                        {
+                            try
+                            {
+                                Server server = new Server(url, curGroup);
+                                bool match = false;
+                                foreach (KeyValuePair<string, Server> pair in old_servers)
+                                {
+                                    if (server.isMatchServer(pair.Value))
+                                    {
+                                        match = true;
+                                        old_servers.Remove(pair.Key);
+                                        pair.Value.CopyServerInfo(server);
+                                        ++count;
+                                        break;
+                                    }
+                                }
+                                if (!match)
+                                {
+                                    config.configs.Add(server);
+                                    ++count;
+                                }
+                            }
+                            catch
+                            { }
+                        }
+                        foreach (KeyValuePair<string, Server> pair in old_servers)
+                        {
+                            for (int i = config.configs.Count - 1; i >= 0; --i)
+                            {
+                                if (config.configs[i].id == pair.Key)
+                                {
+                                    config.configs.RemoveAt(i);
+                                    break;
+                                }
+                            }
+                        }
+                        controller.SaveServersConfig(config);
+                    }
+                    // 重新获取config
+                    config = controller.GetCurrentConfiguration();
+                    if (selected_server != null)
+                    {
+                        bool match = false;
+                        for (int i = config.configs.Count - 1; i >= 0; --i)
+                        {
+                            if (config.configs[i].id == selected_server.id)
+                            {
+                                config.index = i;
+                                match = true;
+                                break;
+                            }
+                            else if (config.configs[i].group == selected_server.group)
+                            {
+                                if (config.configs[i].isMatchServer(selected_server))
+                                {
+                                    config.index = i;
+                                    match = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!match)
+                        {
+                            config.index = config.configs.Count - 1;
+                        }
+                    }
+                    else
+                    {
+                        config.index = config.configs.Count - 1;
+                    }
+                    controller.SaveServersConfig(config);
+
+                }
+            }
+
+            // 更新后
+            if (count > 0)
+            {
+                Configuration config = controller.GetCurrentConfiguration();
+                // 删除默认无效服务器
+                if ( config.configs[0].server == Configuration.GetDefaultServer().server)
+                {
+                    config.configs.RemoveAt(0);
+                    controller.SaveServersConfig(config);
+                }
+                ShowBalloonTip(I18N.GetString("Success"), I18N.GetString("API update successfully!"), ToolTipIcon.Info, 10000);
+                //MessageBox.Show(count.ToString());
+            }
+            else
+            {
+                ShowBalloonTip(I18N.GetString("Error"),
+                    I18N.GetString("API update failed!"), ToolTipIcon.Info, 10000);
+            }
+
+        }
+
         void updateChecker_NewVersionFound(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(updateChecker.LatestVersionNumber))
@@ -673,11 +953,13 @@ namespace Shadowsocks.View
             }
         }
 
+
         private void ShowConfigForm(bool addNode)
         {
             if (configForm != null)
             {
                 configForm.Activate();
+                // MessageBox.Show("1");
                 if (addNode)
                 {
                     Configuration cfg = controller.GetCurrentConfiguration();
@@ -686,8 +968,11 @@ namespace Shadowsocks.View
             }
             else
             {
+                //MessageBox.Show("2.0");
                 configForm = new ConfigForm(controller, updateChecker, addNode ? -1 : -2);
+                //MessageBox.Show("2.1");
                 configForm.Show();
+                //MessageBox.Show("2.2");
                 configForm.Activate();
                 configForm.BringToFront();
                 configForm.FormClosed += configForm_FormClosed;
@@ -699,11 +984,13 @@ namespace Shadowsocks.View
             if (configForm != null)
             {
                 configForm.Activate();
+                // MessageBox.Show("3");
             }
             else
             {
                 configForm = new ConfigForm(controller, updateChecker, index);
                 configForm.Show();
+                // MessageBox.Show("4");
                 configForm.Activate();
                 configForm.BringToFront();
                 configForm.FormClosed += configForm_FormClosed;
@@ -810,6 +1097,69 @@ namespace Shadowsocks.View
             }
         }
 
+        private void ShowApiSettingForm()
+        {
+            if (apiForm != null)
+            {
+                apiForm.Activate();
+                apiForm.Update();
+                if (apiForm.WindowState == FormWindowState.Minimized)
+                {
+                    apiForm.WindowState = FormWindowState.Normal;
+                }
+            }
+            else
+            {
+                apiForm = new ApiForm(controller);
+                apiForm.Show();
+                apiForm.Activate();
+                apiForm.BringToFront();
+                apiForm.FormClosed += apiForm_FormClosed;
+            }
+        }
+
+        private void ShowAccountForm()
+        {
+            if (accountForm != null)
+            {
+                accountForm.Activate();
+                accountForm.Update();
+                if (accountForm.WindowState == FormWindowState.Minimized)
+                {
+                    accountForm.WindowState = FormWindowState.Normal;
+                }
+            }
+            else
+            {
+                accountForm = new AccountForm(controller);
+                accountForm.Show();
+                accountForm.Activate();
+                accountForm.BringToFront();
+                accountForm.FormClosed += accountForm_FormClosed;
+            }
+        }
+
+        private void ShowNewMainForm()
+        {
+            if (newMainForm != null)
+            {
+                newMainForm.Activate();
+                newMainForm.Update();
+                if (newMainForm.WindowState == FormWindowState.Minimized)
+                {
+                    newMainForm.WindowState = FormWindowState.Normal;
+                }
+            }
+            else
+            {
+                newMainForm = new NewMainForm(controller);
+                newMainForm.Show();
+                newMainForm.Activate();
+                newMainForm.BringToFront();
+                newMainForm.FormClosed += newMainForm_FormClosed;
+            }
+        }
+
         void configForm_FormClosed(object sender, FormClosedEventArgs e)
         {
             configForm = null;
@@ -845,6 +1195,28 @@ namespace Shadowsocks.View
             subScribeForm = null;
         }
 
+        void apiForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            apiForm = null;
+            //updateApiNodeItem.PerformClick();
+            //updateApiNodeItem_Click(this, new EventArgs());
+            Configuration cfg = controller.GetCurrentConfiguration();
+            if (cfg.isDefaultConfig())
+            {
+                updateApiNodeItem_Click(this, new EventArgs());
+            }
+        }
+
+        void accountForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            accountForm = null;
+        }
+
+        void newMainForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            newMainForm = null;
+        }
+
         private void Config_Click(object sender, EventArgs e)
         {
             if (typeof(int) == sender.GetType())
@@ -856,6 +1228,8 @@ namespace Shadowsocks.View
                 ShowConfigForm(false);
             }
         }
+
+
 
         private void Import_Click(object sender, EventArgs e)
         {
@@ -958,13 +1332,150 @@ namespace Shadowsocks.View
                 }
                 else
                 {
-                    ShowConfigForm(false);
+                    // ShowConfigForm(false);
+                    ShowNewMainForm();
+
                 }
             }
             else if (e.Button == MouseButtons.Middle)
             {
+                // 鼠标中间的滚轮
                 ShowServerLogForm();
             }
+        }
+
+        private void updateApiNodeItem_Click(object sender, EventArgs e)
+        {
+            // 检查是否存在用户
+            // 检查用户是否存在token
+            // 检查用户token是否有效
+            // 不通过则跳转？
+            // 不跳转
+
+            // 是否更新订阅
+            Thread t = new Thread(() =>
+            {
+                updateApiNodeItem_Click_todo(this, new EventArgs());
+            });
+            t.Start();
+        }
+
+        // @TODO
+        // 检测是否存在token
+        // 不存在token，则跳转登录界面获取token
+
+        // 检测token是否有效
+        // 否则跳转登录界面
+        private void updateApiNodeItem_Click_todo(object sender, EventArgs e)
+        {
+            Console.WriteLine("updateApiNodeItem_Click_todo");
+            Configuration config = controller.GetCurrentConfiguration();
+            int userIndex = -1;
+            if (config.userInfos.Count > 0)
+            {
+                // 获取有效token用户index
+                for (int i = 0; i < config.userInfos.Count; i++)
+                {
+                    if (config.userInfos[i].userEmail!="" && config.userInfos[i].userToken != "")
+                    {
+                        if (Utils.isTokenValid(config.userInfos[i].userToken))
+                        {
+                            userIndex = i;
+                            break;
+                        } else
+                        {
+                            //更新token
+                            Console.WriteLine("token expired Login.RenewToken");
+                            ShowBalloonTip(I18N.GetString("Warn"), I18N.GetString("Token即将失效，正在更新..."), ToolTipIcon.Info, 10000);
+                            string tempToken = Login.RenewToken(i);
+                            if (tempToken != "")
+                            {
+                                config.userInfos[i].userToken = Login.RenewToken(i);
+                                userIndex = i;
+                                ShowBalloonTip(I18N.GetString("Success"), I18N.GetString("Token更新成功！"), ToolTipIcon.Info, 10000);
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (userIndex >= 0)
+                {
+                    Console.WriteLine("JObject userInfoJO = Login.GetLoginJObject(controller, userIndex);");
+                    JObject userInfoJO = Login.GetLoginJObject(controller, userIndex);
+                    if (userInfoJO != null)
+                    {
+                        Console.WriteLine("update server:" + userInfoJO["data"]["ssr_url_all"].ToString());
+                        int count = Utils.updateServerFromSSRURL(controller, updateSubscribeManager, Util.Base64.DecodeUrlSafeBase64(userInfoJO["data"]["ssr_url_all"].ToString()));
+                        if (count > 0)
+                        {
+                            ShowBalloonTip(I18N.GetString("Success"), I18N.GetString("API update successfully!"), ToolTipIcon.Info, 10000);
+                        }
+                        else
+                        {
+                            ShowBalloonTip(I18N.GetString("Error"), I18N.GetString("API update failed!"), ToolTipIcon.Info, 10000);
+                        }
+                    }
+                } else
+                {
+                    ShowBalloonTip(I18N.GetString("Error"), I18N.GetString("Token已失效！请重新登录！"), ToolTipIcon.Info, 10000);
+                }
+            }
+        }
+
+        private void test1Item_Click(object sender, EventArgs e)
+        {
+            if (ConnectTest.hasInternetAccess())
+            {
+                MessageBox.Show("Test Internet Access Successfully!");
+            }
+            else
+            {
+                MessageBox.Show("Failed to test Internet Access!");
+            }
+        }
+        private void test2Item_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Test " + ConnectTest.GetValidLoginUrl().ToString() + " Successfully!");
+        }
+        private void test3Item_Click(object sender, EventArgs e)
+        {
+            if (ConnectTest.canLocalSocks5ProxyConnectBaidu())
+            {
+                MessageBox.Show("Test Proxy Baidu Successfully!");
+            }
+        }
+        private void test4Item_Click(object sender, EventArgs e)
+        {
+            if (ConnectTest.canLocalSocks5ProxyConnectGoogle())
+            {
+                MessageBox.Show("Test Proxy Google Successfully!");
+            }
+            else
+            {
+                MessageBox.Show("Failed to test Proxy Google!");
+            }
+            //Configuration config = controller.GetCurrentConfiguration();
+            //if (ConnectTest.canUrlConnect(config.ApiUrl + "/mod_mu/func/ping", "ret", false))
+            //{
+            //    MessageBox.Show(config.ApiUrl + "/mod_mu/func/ping "+"Test Successfully!");
+            //}
+            //else
+            //{
+            //    MessageBox.Show("Failed to Test "+config.ApiUrl + "/mod_mu/func/ping");
+            //}
+        }
+
+        private void editApiInfoItem_Click(object sender, EventArgs e)
+        {
+            ShowApiSettingForm();
+        }
+        private void accountItem_Click(object sender, EventArgs e)
+        {
+            ShowAccountForm();
+        }
+        private void newMainFormItem_Click(object sender, EventArgs e)
+        {
+            ShowNewMainForm();
         }
 
         private void NoModifyItem_Click(object sender, EventArgs e)
@@ -1051,22 +1562,22 @@ namespace Shadowsocks.View
 
         private void UpdatePACFromLanIPListItem_Click(object sender, EventArgs e)
         {
-            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/ssr/ss_lanip.pac");
+            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/pac/ss_lanip.pac");
         }
 
         private void UpdatePACFromCNWhiteListItem_Click(object sender, EventArgs e)
         {
-            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/ssr/ss_white.pac");
+            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/pac/ss_white.pac");
         }
 
         private void UpdatePACFromCNOnlyListItem_Click(object sender, EventArgs e)
         {
-            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/ssr/ss_white_r.pac");
+            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/pac/ss_white_r.pac");
         }
 
         private void UpdatePACFromCNIPListItem_Click(object sender, EventArgs e)
         {
-            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/ssr/ss_cnip.pac");
+            controller.UpdatePACFromOnlinePac("https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/pac/ss_cnip.pac");
         }
 
         private void EditUserRuleFileForGFWListItem_Click(object sender, EventArgs e)
@@ -1125,26 +1636,6 @@ namespace Shadowsocks.View
             }
         }
 
-        private void URL_Split(string text, ref List<string> out_urls)
-        {
-            if (String.IsNullOrEmpty(text))
-            {
-                return;
-            }
-            int ss_index = text.IndexOf("ss://", 1, StringComparison.OrdinalIgnoreCase);
-            int ssr_index = text.IndexOf("ssr://", 1, StringComparison.OrdinalIgnoreCase);
-            int index = ss_index;
-            if (index == -1 || index > ssr_index && ssr_index != -1) index = ssr_index;
-            if (index == -1)
-            {
-                out_urls.Insert(0, text);
-            }
-            else
-            {
-                out_urls.Insert(0, text.Substring(0, index));
-                URL_Split(text.Substring(index), ref out_urls);
-            }
-        }
 
         private void CopyAddress_Click(object sender, EventArgs e)
         {
@@ -1154,7 +1645,7 @@ namespace Shadowsocks.View
                 if (iData.GetDataPresent(DataFormats.Text))
                 {
                     List<string> urls = new List<string>();
-                    URL_Split((string)iData.GetData(DataFormats.Text), ref urls);
+                    Utils.URL_Split((string)iData.GetData(DataFormats.Text), ref urls);
                     int count = 0;
                     foreach (string url in urls)
                     {

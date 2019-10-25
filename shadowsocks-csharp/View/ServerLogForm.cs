@@ -133,7 +133,7 @@ namespace Shadowsocks.View
 
         private void UpdateTitle()
         {
-            this.Text = title_perfix + I18N.GetString("ServerLog") + "("
+            this.Text = title_perfix + I18N.GetString("ServerLog") + " ("
                 + (controller.GetCurrentConfiguration().shareOverLan ? "any" : "local") + ":" + controller.GetCurrentConfiguration().localPort.ToString()
                 + "(" + Model.Server.GetForwardServerRef().GetConnections().Count.ToString()+ ")"
                 + " " + I18N.GetString("Version") + UpdateChecker.FullVersion
@@ -252,6 +252,7 @@ namespace Shadowsocks.View
                 ColorMix(a.G, b.G, alpha),
                 ColorMix(a.B, b.B, alpha));
         }
+
         public void UpdateLogThread()
         {
             while (workerThread != null)
@@ -267,6 +268,7 @@ namespace Shadowsocks.View
                 workerEvent.WaitOne();
             }
         }
+
         public void UpdateLog()
         {
             if (workerThread == null)
@@ -279,6 +281,7 @@ namespace Shadowsocks.View
                 workerEvent.Set();
             }
         }
+
         public void RefreshLog()
         {
             if (ServerSpeedLogList == null)

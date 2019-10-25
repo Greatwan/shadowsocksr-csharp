@@ -6,14 +6,20 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using OpenDNS;
 using Shadowsocks.Encryption;
 using Shadowsocks.Model;
+using Shadowsocks.Controller;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Shadowsocks.Util
 {
@@ -22,6 +28,7 @@ namespace Shadowsocks.Util
         private delegate IPHostEntry GetHostEntryHandler(string ip);
 
         private static LRUCache<string, IPAddress> dnsBuffer = new LRUCache<string, IPAddress>();
+        
 
         public static LRUCache<string, IPAddress> DnsBuffer
         {
@@ -58,6 +65,407 @@ namespace Shadowsocks.Util
                                          (UIntPtr)0xFFFFFFFFFFFFFFFF);
             }
 #endif
+        }
+
+        public static string byteToString_python_type(byte[] input, int size)
+        {
+            string result = "";
+            for (int i = 0; i < size; i++)
+            {
+                if (input[i] < 127 && input[i] > 31)
+                {
+                    result += Convert.ToChar(input[i]);
+                }
+                else if (input[i] == 10)
+                {
+                    result += "\\n";
+                }
+                else if (input[i] == 13)
+                {
+                    result += "\\r";
+                }
+                else
+                {
+                    result += "\\x" + input[i].ToString("x2");
+                }
+            }
+            return result;
+        }
+
+        public static double tcping(string addr, int port)
+        {
+            //IPAddress ipa = IPAddress.Parse(addr);
+            //IPEndPoint ipe = new IPEndPoint(ipa, port);
+            TcpClient tcpClient = new TcpClient();
+            Stopwatch stopwatch = new Stopwatch();
+            try
+            {
+                stopwatch.Start();
+                // tcpClient.Connect(ipe);
+                var result = tcpClient.BeginConnect(addr, port, null, null);
+                if (result.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(1.5)))
+                {
+                    stopwatch.Stop();
+                }
+                else
+                {
+                    return 0;
+                }
+                
+                double t = stopwatch.Elapsed.TotalMilliseconds;
+                return t;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
+            
+        }
+
+        public static string tcping_3(string addr, int port)
+        {
+            double i = tcping(addr, port);
+            if (i != 0)
+            {
+                return i.ToString("0.0") + "ms";
+            }
+            else
+            {
+                double ii = tcping(addr, port);
+                if (ii != 0)
+                {
+                    return ii.ToString("0.0") + "ms";
+                }
+                else
+                {
+                    double iii = tcping(addr, port);
+                    if (iii == 0)
+                    {
+                        return "Failed!";
+                    }
+                    else
+                    {
+                        return iii.ToString("0.0") + "ms";
+                    }
+
+                }
+            }
+        }
+
+        public static int ping_example(string addr)
+        {
+            Ping pingSender = new Ping();
+            PingOptions options = new PingOptions();
+
+            // Use the default Ttl value which is 128,
+            // but change the fragmentation behavior.
+            options.DontFragment = true;
+
+            // Create a buffer of 32 bytes of data to be transmitted.
+            string data = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            byte[] buffer = Encoding.ASCII.GetBytes(data);
+            int timeout = 120;
+            PingReply reply = pingSender.Send(addr, timeout, buffer, options);
+            if (reply.Status == IPStatus.Success)
+            {
+                return Convert.ToInt32(reply.RoundtripTime);
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        public static string ping_example_3(string addr)
+        {
+            double i = ping_example(addr);
+            if (i != 0)
+            {
+                return Convert.ToString(i) + "ms";
+            }
+            else
+            {
+                int ii = ping_example(addr);
+                if (ii != 0)
+                {
+                    return Convert.ToString(ii) + "ms";
+                }
+                else
+                {
+                    int iii = ping_example(addr);
+                    if (iii == 0)
+                    {
+                        return "Failed!";
+                    }
+                    else
+                    {
+                        return Convert.ToString(iii) + "ms";
+                    }
+
+                }
+            }
+        }
+
+        public static Boolean isTokenValid(string token)
+        {
+            if (token == "")
+            {
+                return false;
+            }
+            string infoBody = Util.Base64.DecodeUrlSafeBase64(token.Split('.')[1]);
+            JObject jo = (JObject)JsonConvert.DeserializeObject(infoBody);
+            Int32 expTime = -1;
+            if (!Int32.TryParse(jo["exp"].ToString(), out expTime))
+            {
+                return false;
+            }
+            // ssr-4.0不行
+            //long unixTime = ((DateTimeOffset)DateTime.UtcNow).ToUnixTimeSeconds();
+            Int32 unixTime = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+            Console.WriteLine(expTime - unixTime);
+            if (expTime - unixTime < 3*86400)
+            {
+                return false;
+            }
+            return true;
+        }
+
+#if !_CONSOLE
+        public static int updateServerFromSSRURL(ShadowsocksController controller, UpdateSubscribeManager updateSubscribeManager, string result)
+        {
+            //Console.WriteLine(result);
+            int count = 0;
+            //string result = result;
+            //updateFreeNodeChecker.FreeNodeResult = result;
+            //MessageBox.Show(result);
+            if (!String.IsNullOrEmpty(result))
+            {
+                List<string> urls = new List<string>();
+                int max_node_num = 0;
+                Configuration config = controller.GetCurrentConfiguration();
+                //Console.WriteLine("config.configs.Count->" + config.configs.Count);
+                Server selected_server = null;
+                if (config.index >= 0 && config.index < config.configs.Count)
+                {
+                    selected_server = config.configs[config.index];
+                }
+                //Console.WriteLine("result:"+result);
+                Utils.URL_Split(result, ref urls);
+                
+                for (int i = urls.Count - 1; i >= 0; --i)
+                {
+                    //Console.WriteLine(urls[i]);
+                    if (!urls[i].StartsWith("ssr"))
+                        urls.RemoveAt(i);
+                }
+                if (urls.Count > 0)
+                {
+                    bool keep_selected_server = false; // set 'false' if import all nodes
+                    if (max_node_num <= 0 || max_node_num >= urls.Count)
+                    {
+                        urls.Reverse();
+                    }
+                    else
+                    {
+                        Random r = new Random();
+                        Util.Utils.Shuffle(urls, r);
+                        urls.RemoveRange(max_node_num, urls.Count - max_node_num);
+                        if (!config.isDefaultConfig())
+                            keep_selected_server = true;
+                    }
+                    string lastGroup = null;
+                    string curGroup = null;
+                    foreach (string url in urls)
+                    {
+                        try // try get group name
+                        {
+                            Server server = new Server(url, null);
+                            if (!String.IsNullOrEmpty(server.group))
+                            {
+                                curGroup = server.group;
+                                break;
+                            }
+                        }
+                        catch
+                        { }
+                    }
+                    //MessageBox.Show(curGroup + "||1");
+                    string subscribeURL = updateSubscribeManager.URL;
+                    //MessageBox.Show(subscribeURL + "||2");
+                    if (String.IsNullOrEmpty(curGroup))
+                    {
+                        curGroup = subscribeURL;
+                    }
+
+                    //MessageBox.Show(curGroup + "||3");
+                    for (int i = 0; i < config.serverSubscribes.Count; ++i)
+                    {
+                        if (subscribeURL == config.serverSubscribes[i].URL)
+                        {
+                            lastGroup = config.serverSubscribes[i].Group;
+                            //MessageBox.Show(lastGroup);
+                            config.serverSubscribes[i].Group = curGroup;
+                            break;
+                        }
+                    }
+                    if (lastGroup == null)
+                    {
+                        lastGroup = curGroup;
+                    }
+
+                    if (keep_selected_server && selected_server.group == curGroup)
+                    {
+                        bool match = false;
+                        for (int i = 0; i < urls.Count; ++i)
+                        {
+                            try
+                            {
+                                Server server = new Server(urls[i], null);
+                                if (selected_server.isMatchServer(server))
+                                {
+                                    match = true;
+                                    break;
+                                }
+                            }
+                            catch
+                            { }
+                        }
+                        if (!match)
+                        {
+                            urls.RemoveAt(0);
+                            urls.Add(selected_server.GetSSRLinkForServer());
+                        }
+                    }
+
+                    // import all, find difference
+                    {
+                        Dictionary<string, Server> old_servers = new Dictionary<string, Server>();
+                        if (!String.IsNullOrEmpty(lastGroup))
+                        {
+                            for (int i = config.configs.Count - 1; i >= 0; --i)
+                            {
+                                if (lastGroup == config.configs[i].group)
+                                {
+                                    old_servers[config.configs[i].id] = config.configs[i];
+                                }
+                            }
+                        }
+                        foreach (string url in urls)
+                        {
+                            try
+                            {
+                                Server server = new Server(url, curGroup);
+                                bool match = false;
+                                foreach (KeyValuePair<string, Server> pair in old_servers)
+                                {
+                                    if (server.isMatchServer(pair.Value))
+                                    {
+                                        match = true;
+                                        old_servers.Remove(pair.Key);
+                                        pair.Value.CopyServerInfo(server);
+                                        ++count;
+                                        break;
+                                    }
+                                }
+                                if (!match)
+                                {
+                                    config.configs.Add(server);
+                                    ++count;
+                                }
+                            }
+                            catch
+                            { }
+                        }
+                        foreach (KeyValuePair<string, Server> pair in old_servers)
+                        {
+                            for (int i = config.configs.Count - 1; i >= 0; --i)
+                            {
+                                if (config.configs[i].id == pair.Key)
+                                {
+                                    config.configs.RemoveAt(i);
+                                    break;
+                                }
+                            }
+                        }
+                        controller.SaveServersConfig(config);
+                    }
+                    // 重新获取config
+                    config = controller.GetCurrentConfiguration();
+                    if (selected_server != null)
+                    {
+                        bool match = false;
+                        for (int i = config.configs.Count - 1; i >= 0; --i)
+                        {
+                            if (config.configs[i].id == selected_server.id)
+                            {
+                                config.index = i;
+                                match = true;
+                                break;
+                            }
+                            else if (config.configs[i].group == selected_server.group)
+                            {
+                                if (config.configs[i].isMatchServer(selected_server))
+                                {
+                                    config.index = i;
+                                    match = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!match)
+                        {
+                            config.index = config.configs.Count - 1;
+                        }
+                    }
+                    else
+                    {
+                        config.index = config.configs.Count - 1;
+                    }
+                    controller.SaveServersConfig(config);
+
+                }
+            }
+
+            // 更新后
+            if (count > 0)
+            {
+                Configuration config = controller.GetCurrentConfiguration();
+                // 删除默认无效服务器
+                if (config.configs[0].server == Configuration.GetDefaultServer().server)
+                {
+                    config.configs.RemoveAt(0);
+                    controller.SaveServersConfig(config);
+                }
+            }
+
+            return count;
+        }
+#endif
+        public static bool isIP(string ip)
+        {
+            //判断是否为IP
+            return Regex.IsMatch(ip, @"^((2[0-4]\d|25[0-5]|[01]?\d\d?)\.){3}(2[0-4]\d|25[0-5]|[01]?\d\d?)$");
+        }
+
+        public static string getIp(string host)
+        {
+            if (isIP(host))
+            {
+                return host;
+            }
+            else
+            {
+                try
+                {
+                    System.Net.IPHostEntry ipEntry = System.Net.Dns.GetHostEntry(host);
+                    System.Net.IPAddress[] addr = ipEntry.AddressList;
+                    return addr[0].ToString();
+                }
+                catch (System.Net.Sockets.SocketException)
+                {
+                    return "no ip";
+                }
+            }
         }
 
         public static string UnGzip(byte[] buf)
@@ -461,6 +869,29 @@ namespace Shadowsocks.Util
             int ret = process.ExitCode;
             process.Close();
             return ret;
+        }
+
+        public static void URL_Split(string text, ref List<string> out_urls)
+        {
+            if (String.IsNullOrEmpty(text))
+            {
+                Console.WriteLine("String.IsNullOrEmpty(text)");
+                return;
+            }
+            //Console.WriteLine(text);
+            int ss_index = text.IndexOf("ss://", 1, StringComparison.OrdinalIgnoreCase);
+            int ssr_index = text.IndexOf("ssr://", 1, StringComparison.OrdinalIgnoreCase);
+            int index = ss_index;
+            if (index == -1 || index > ssr_index && ssr_index != -1) index = ssr_index;
+            if (index == -1)
+            {
+                out_urls.Insert(0, text);
+            }
+            else
+            {
+                out_urls.Insert(0, text.Substring(0, index));
+                URL_Split(text.Substring(index), ref out_urls);
+            }
         }
 
         public static int GetDpiMul()

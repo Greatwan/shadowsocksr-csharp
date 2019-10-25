@@ -54,6 +54,7 @@ namespace Shadowsocks.Model
         public string remarks;
     }
 
+
     public class PortMapConfigCache
     {
         public PortMapType type;
@@ -66,11 +67,36 @@ namespace Shadowsocks.Model
     [Serializable]
     public class ServerSubscribe
     {
-        private static string DEFAULT_FEED_URL = "https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/free/freenodeplain.txt";
+        private static string DEFAULT_FEED_URL = "https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/free/freenode.txt";
         //private static string OLD_DEFAULT_FEED_URL = "https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/free/freenode.txt";
 
         public string URL = DEFAULT_FEED_URL;
         public string Group;
+    }
+
+    [Serializable]
+    public class UserInfo
+    {
+        public string email = "";
+        public string user_class = "";
+        //public string class_expire = "";
+        public string traffic_remain = "";
+        public string expire_time = "";
+
+        public string userEmail = "";
+        public string userMoney = "";
+        public string userName = "";
+        public string userToken = "";
+        public string apiReserveUrl = "";
+    }
+
+    [Serializable]
+    public class ProductTraffic
+    {
+        public int productId = -1;
+        public string expireTime = "";
+        public string todayusedTraffic = "";
+        public string unusedTraffic = "";
     }
 
     public class GlobalConfiguration
@@ -88,6 +114,14 @@ namespace Shadowsocks.Model
         public bool shareOverLan;
         public int localPort;
         public string localAuthPassword;
+
+        public string ApiEmail;
+        public string ApiPassword;
+        public string ApiUrl;
+        public bool ApiAutoUpdate;
+        public bool ApiUpdateWithProxy;
+        public bool ApiSpiderMode;
+        public bool ApiHttps;
 
         public string dnsServer;
         public int reconnectTimes;
@@ -119,6 +153,7 @@ namespace Shadowsocks.Model
 
         public bool nodeFeedAutoUpdate;
         public List<ServerSubscribe> serverSubscribes;
+        public List<UserInfo> userInfos;
 
         public Dictionary<string, string> token = new Dictionary<string, string>();
         public Dictionary<string, PortMapConfig> portMap = new Dictionary<string, PortMapConfig>();
@@ -383,9 +418,16 @@ namespace Shadowsocks.Model
             keepVisitTime = 180;
             connectTimeout = 5;
             dnsServer = "";
+            ApiEmail = "";
+            ApiPassword = "";
+            ApiUrl = "";
+            ApiUpdateWithProxy = false;
+            ApiAutoUpdate = true;
+            ApiSpiderMode = true;
+            ApiHttps = true;
 
             randomAlgorithm = (int)ServerSelectStrategy.SelectAlgorithm.LowException;
-            random = true;
+            random = false;
             sysProxyMode = (int)ProxyMode.Global;
             proxyRuleMode = (int)ProxyRuleMode.BypassLanAndChina;
 
@@ -394,7 +436,10 @@ namespace Shadowsocks.Model
             serverSubscribes = new List<ServerSubscribe>()
             {
             };
+            userInfos = new List<UserInfo>()
+            {
 
+            };
             configs = new List<Server>()
             {
                 GetDefaultServer()
@@ -415,6 +460,13 @@ namespace Shadowsocks.Model
             TTL = config.TTL;
             connectTimeout = config.connectTimeout;
             dnsServer = config.dnsServer;
+            ApiEmail = config.ApiEmail;
+            ApiPassword = config.ApiPassword;
+            ApiUrl = config.ApiUrl;
+            ApiAutoUpdate = config.ApiAutoUpdate;
+            ApiUpdateWithProxy = config.ApiUpdateWithProxy;
+            ApiSpiderMode = config.ApiSpiderMode;
+            ApiHttps = config.ApiHttps;
             proxyEnable = config.proxyEnable;
             pacDirectGoProxy = config.pacDirectGoProxy;
             proxyType = config.proxyType;
@@ -431,6 +483,7 @@ namespace Shadowsocks.Model
             isHideTips = config.isHideTips;
             nodeFeedAutoUpdate = config.nodeFeedAutoUpdate;
             serverSubscribes = config.serverSubscribes;
+            userInfos = config.userInfos;
         }
 
         public void FixConfiguration()
@@ -524,6 +577,7 @@ namespace Shadowsocks.Model
             {
                 config.index = 0;
             }
+            Console.WriteLine("Save " + config.userInfos.Count);
             try
             {
                 using (StreamWriter sw = new StreamWriter(File.Open(CONFIG_FILE, FileMode.Create)))
@@ -581,6 +635,24 @@ namespace Shadowsocks.Model
         public static Server GetDefaultServer()
         {
             return new Server();
+        }
+
+
+        public static string GetDefaultUrl(int choice)
+        {
+            if (choice == 0)
+            {
+                return "https://api.example.com";
+            }
+            else if (choice == 1)
+            {
+                return "http://api.reserve.example.com:4201";
+            }
+            else
+            {
+                return "https://api.example.com";
+            }
+            
         }
 
         public bool isDefaultConfig()

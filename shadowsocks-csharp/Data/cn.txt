@@ -5,6 +5,10 @@ Shadowsocks=Shadowsocks
 # Menu items
 
 Mode=系统代理模式
+Show main panel=显示主面板
+Login=登录
+Update node=更新服务器
+Edit login information=修改登录信息
 No modify system proxy=保持当前状态不修改
 Disable system proxy=直连模式
 PAC=PAC 模式
@@ -16,6 +20,8 @@ Bypass LAN && not China=绕过局域网和非大陆
 User custom=用户自定义
 Disable bypass=全局
 Servers=服务器
+Show Icmp result=显示延迟
+Show Tcping result=显示端口TCP延迟
 Edit servers...=编辑服务器...
 Import servers from file...=从文件导入服务器...
 Servers Subscribe=服务器订阅
@@ -55,6 +61,53 @@ Donate...=捐助...
 Quit=退出
 Edit Servers=编辑服务器
 Global Settings=选项设置
+
+# New Main Form
+Subscribe=服务器订阅
+Contact=联系
+Test=测试
+Edit=编辑
+testAll=一键测试
+ServerManage=服务器管理
+ServerEdit=服务器编辑
+ServerImport=服务器添加
+ServerImportFromClipboard=从剪贴板添加
+ServerImportFromQrcode=从二维码添加
+ServerImportManuallySetup=手动添加
+updateFromAccount=从账号更新
+updateFromSubscribe=从订阅更新
+updateAll=更新全部
+NewMainForm=主面板
+Connect=连接
+Connect_type=连接模式
+Statistics=连接统计
+Server_config=编辑服务器
+Account=账号信息
+Click To Start=点击启动
+Click To Stop=点击停止
+Level=等级
+Class_expire=到期时间
+unusedTraffic=剩余流量
+DL=下载
+UP=上传
+Log=日志
+
+# Api Edi Form
+ApiForm=Api登录设置
+Api_Email=邮箱
+Api_Password=密码
+Api_Url=网站地址
+Api_SpiderMode=爬虫模式
+Auto Update=启动SSR自动更新
+UpdateWithProxy=从代理更新
+Account info=账号信息
+Update=更新
+Api_Money=余额
+Api_Level=等级
+Api_Level_due_date=等级过期时间
+Api_Traffic(used/enable)=总流量/已用
+Api_Today_used=今日使用
+Account_due_date=账号过期时间
 
 # Config Form
 
@@ -109,10 +162,11 @@ Local proxy=本地代理
 Build-in http proxy=内置http代理(目前有bug)
 Proxy Port=本地端口
 Reconnect Times=重连次数
- Timeout=连接超时
+Timeout=连接超时
 TTL=空闲断开秒数
 
 OK=确定
+Save=保存
 Cancel=取消
 
 # ServerLog Form

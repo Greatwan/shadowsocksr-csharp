@@ -166,6 +166,7 @@ namespace Shadowsocks.Controller
 
         protected string process(string request)
         {
+            Console.WriteLine("process->" + request);
             string req;
             req = request.Substring(0, request.IndexOf("\r\n"));
             req = req.Substring(req.IndexOf("api?") + 4);
