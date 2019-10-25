@@ -6,11 +6,16 @@ ShadowsocksR for Windows
 
 #### Usage
 
-<img src="https://github.com/00a7a00/shadowsocksr-csharp/raw/login/.github/apilogin.png" />
+![image](https://github.com/00a7a00/shadowsocksr-csharp/raw/master/pics/api_login.png)
+![image](https://github.com/00a7a00/shadowsocksr-csharp/raw/master/pics/new_panel.png)
+
+api_url https://github.com/00a7a00/shadowsocksr-csharp/blob/master/shadowsocks-csharp/Model/Configuration.cs#L641
+
 
 #### Download
 
-<a href="https://github.com/00a7a00/shadowsocksr-csharp/releases" >Download</a>
+请自行 Build
+
 
 ### Develop
 
@@ -19,6 +24,8 @@ ShadowsocksR for Windows
 2、```git clone https://github.com/00a7a00/shadowsocksr-csharp```
 
 3、......
+
+
 #### License
 
 GPLv3
